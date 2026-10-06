@@ -1,0 +1,629 @@
+import { useEffect, useState, type FormEvent } from 'react'
+import {
+  LogIn,
+  Lock,
+  Mail,
+  Plus,
+  Pencil,
+  Trash2,
+  X,
+  Save,
+  Eye,
+  MousePointerClick,
+  Power,
+  ArrowLeft,
+  RefreshCw,
+} from 'lucide-react'
+import { supabase } from './lib/supabase'
+
+type Product = {
+  id: string
+  title: string
+  description: string | null
+  price: number
+  image_url: string | null
+  video_url: string | null
+  checkout_url: string | null
+  button_text: string | null
+  active: boolean
+  views: number
+  clicks: number
+  created_at: string
+}
+
+type AdminProps = {
+  loggedIn: boolean
+  onLogin: () => void
+  onBack: () => void
+  onLogout: () => void
+}
+
+const emptyForm = {
+  title: '',
+  description: '',
+  price: '',
+  image_url: '',
+  video_url: '',
+  checkout_url: '',
+  button_text: 'Comprar agora',
+  active: true,
+}
+
+export default function Admin({
+  loggedIn,
+  onLogin,
+  onBack,
+  onLogout,
+}: AdminProps) {
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [loginLoading, setLoginLoading] = useState(false)
+  const [error, setError] = useState('')
+
+  const [products, setProducts] = useState<Product[]>([])
+  const [loadingProducts, setLoadingProducts] = useState(false)
+  const [saving, setSaving] = useState(false)
+
+  const [showForm, setShowForm] = useState(false)
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [form, setForm] = useState(emptyForm)
+
+  useEffect(() => {
+    if (loggedIn) {
+      loadProducts()
+    }
+  }, [loggedIn])
+
+  async function handleLogin(e: FormEvent) {
+    e.preventDefault()
+
+    setLoginLoading(true)
+    setError('')
+
+    if (email === 'machelbarros1919@gmail.com' && password === '1234') {
+      setLoginLoading(false)
+      onLogin()
+      return
+    }
+
+    setError('E-mail ou senha incorretos.')
+    setLoginLoading(false)
+  }
+
+  async function loadProducts() {
+    setLoadingProducts(true)
+    setError('')
+
+    const { data, error } = await supabase
+      .from('products')
+      .select('*')
+      .order('created_at', { ascending: false })
+
+    if (error) {
+      console.error(error)
+      setError(`Erro ao carregar produtos: ${error.message}`)
+      setProducts([])
+    } else {
+      setProducts(data || [])
+    }
+
+    setLoadingProducts(false)
+  }
+
+  function openNewProduct() {
+    setEditingId(null)
+    setForm(emptyForm)
+    setShowForm(true)
+    setError('')
+  }
+
+  function openEditProduct(product: Product) {
+    setEditingId(product.id)
+
+    setForm({
+      title: product.title || '',
+      description: product.description || '',
+      price: String(product.price ?? ''),
+      image_url: product.image_url || '',
+      video_url: product.video_url || '',
+      checkout_url: product.checkout_url || '',
+      button_text: product.button_text || 'Comprar agora',
+      active: product.active,
+    })
+
+    setShowForm(true)
+    setError('')
+  }
+
+  function closeForm() {
+    setShowForm(false)
+    setEditingId(null)
+    setForm(emptyForm)
+  }
+
+  async function saveProduct(e: FormEvent) {
+    e.preventDefault()
+
+    if (!form.title.trim()) {
+      setError('Digite o nome do produto.')
+      return
+    }
+
+    if (!form.price || Number(form.price) < 0) {
+      setError('Digite um preço válido.')
+      return
+    }
+
+    setSaving(true)
+    setError('')
+
+    const productData = {
+      title: form.title.trim(),
+      description: form.description.trim() || null,
+      price: Number(form.price),
+      image_url: form.image_url.trim() || null,
+      video_url: form.video_url.trim() || null,
+      checkout_url: form.checkout_url.trim() || null,
+      button_text: form.button_text.trim() || 'Comprar agora',
+      active: form.active,
+    }
+
+    if (editingId) {
+      const { error } = await supabase
+        .from('products')
+        .update(productData)
+        .eq('id', editingId)
+
+      if (error) {
+        console.error(error)
+        setError(`Erro ao atualizar: ${error.message}`)
+        setSaving(false)
+        return
+      }
+    } else {
+      const { error } = await supabase
+        .from('products')
+        .insert(productData)
+
+      if (error) {
+        console.error(error)
+        setError(`Erro ao cadastrar: ${error.message}`)
+        setSaving(false)
+        return
+      }
+    }
+
+    setSaving(false)
+    closeForm()
+    await loadProducts()
+  }
+
+  async function deleteProduct(product: Product) {
+    const confirmed = window.confirm(
+      `Tem certeza que deseja excluir "${product.title}"?`
+    )
+
+    if (!confirmed) return
+
+    setError('')
+
+    const { error } = await supabase
+      .from('products')
+      .delete()
+      .eq('id', product.id)
+
+    if (error) {
+      console.error(error)
+      setError(`Erro ao excluir: ${error.message}`)
+      return
+    }
+
+    await loadProducts()
+  }
+
+  async function toggleProduct(product: Product) {
+    setError('')
+
+    const { error } = await supabase
+      .from('products')
+      .update({ active: !product.active })
+      .eq('id', product.id)
+
+    if (error) {
+      console.error(error)
+      setError(`Erro ao alterar status: ${error.message}`)
+      return
+    }
+
+    await loadProducts()
+  }
+
+  if (!loggedIn) {
+    return (
+      <div className="admin-login">
+        <div className="admin-login-card">
+          <button className="admin-back" onClick={onBack}>
+            ← Voltar ao HOTFLIX
+          </button>
+
+          <div className="admin-logo">
+            HOT<span>FLIX</span>
+          </div>
+
+          <div className="admin-login-title">
+            <Lock size={28} />
+            <h1>Área administrativa</h1>
+            <p>Entre para gerenciar seus produtos.</p>
+          </div>
+
+          <form onSubmit={handleLogin}>
+            <label>E-mail</label>
+
+            <div className="admin-input">
+              <Mail size={18} />
+              <input
+                type="email"
+                placeholder="admin@email.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+              />
+            </div>
+
+            <label>Senha</label>
+
+            <div className="admin-input">
+              <Lock size={18} />
+              <input
+                type="password"
+                placeholder="Sua senha"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+              />
+            </div>
+
+            {error && <div className="admin-error">{error}</div>}
+
+            <button
+              className="admin-login-button"
+              type="submit"
+              disabled={loginLoading}
+            >
+              <LogIn size={19} />
+              {loginLoading ? 'Entrando...' : 'Entrar no ADM'}
+            </button>
+          </form>
+        </div>
+      </div>
+    )
+  }
+
+  const totalViews = products.reduce(
+    (total, product) => total + (product.views || 0),
+    0
+  )
+
+  const totalClicks = products.reduce(
+    (total, product) => total + (product.clicks || 0),
+    0
+  )
+
+  const activeProducts = products.filter((product) => product.active).length
+
+  return (
+    <div className="admin-dashboard">
+      <header className="admin-header">
+        <div className="admin-header-inner">
+          <div className="admin-brand">
+            HOT<span>FLIX</span>
+            <small>ADMIN</small>
+          </div>
+
+          <button className="admin-logout" onClick={onLogout}>
+            <ArrowLeft size={18} />
+            Sair
+          </button>
+        </div>
+      </header>
+
+      <main className="container admin-main">
+        <div className="admin-title">
+          <div>
+            <span className="section-label">PAINEL ADMINISTRATIVO</span>
+            <h1>Gestão de produtos</h1>
+            <p>Cadastre e gerencie os conteúdos do HOTFLIX.</p>
+          </div>
+
+          <div className="admin-title-actions">
+            <button
+              className="admin-refresh"
+              onClick={loadProducts}
+              disabled={loadingProducts}
+            >
+              <RefreshCw
+                size={18}
+                className={loadingProducts ? 'spinner' : ''}
+              />
+            </button>
+
+            <button className="admin-add-button" onClick={openNewProduct}>
+              <Plus size={19} />
+              Novo produto
+            </button>
+          </div>
+        </div>
+
+        <div className="admin-stats">
+          <div className="admin-stat">
+            <strong>{products.length}</strong>
+            <span>Total de produtos</span>
+          </div>
+
+          <div className="admin-stat">
+            <strong>{activeProducts}</strong>
+            <span>Produtos ativos</span>
+          </div>
+
+          <div className="admin-stat">
+            <strong>{totalViews.toLocaleString()}</strong>
+            <span>Visualizações</span>
+          </div>
+
+          <div className="admin-stat">
+            <strong>{totalClicks.toLocaleString()}</strong>
+            <span>Cliques</span>
+          </div>
+        </div>
+
+        {error && <div className="admin-error admin-error-global">{error}</div>}
+
+        {showForm && (
+          <div className="admin-form-card">
+            <div className="admin-form-header">
+              <div>
+                <span className="section-label">
+                  {editingId ? 'EDITAR' : 'NOVO PRODUTO'}
+                </span>
+                <h2>
+                  {editingId ? 'Editar produto' : 'Cadastrar produto'}
+                </h2>
+              </div>
+
+              <button className="admin-close" onClick={closeForm}>
+                <X size={22} />
+              </button>
+            </div>
+
+            <form onSubmit={saveProduct}>
+              <div className="admin-form-grid">
+                <div className="admin-field admin-field-full">
+                  <label>Nome do produto *</label>
+                  <input
+                    type="text"
+                    placeholder="Ex.: Método Venda Rápida"
+                    value={form.title}
+                    onChange={(e) =>
+                      setForm({ ...form, title: e.target.value })
+                    }
+                    required
+                  />
+                </div>
+
+                <div className="admin-field">
+                  <label>Preço (MT) *</label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    placeholder="499"
+                    value={form.price}
+                    onChange={(e) =>
+                      setForm({ ...form, price: e.target.value })
+                    }
+                    required
+                  />
+                </div>
+
+                <div className="admin-field">
+                  <label>Texto do botão</label>
+                  <input
+                    type="text"
+                    placeholder="Comprar agora"
+                    value={form.button_text}
+                    onChange={(e) =>
+                      setForm({ ...form, button_text: e.target.value })
+                    }
+                  />
+                </div>
+
+                <div className="admin-field admin-field-full">
+                  <label>Descrição</label>
+                  <textarea
+                    rows={4}
+                    placeholder="Descreva o conteúdo..."
+                    value={form.description}
+                    onChange={(e) =>
+                      setForm({ ...form, description: e.target.value })
+                    }
+                  />
+                </div>
+
+                <div className="admin-field admin-field-full">
+                  <label>URL da imagem</label>
+                  <input
+                    type="url"
+                    placeholder="https://..."
+                    value={form.image_url}
+                    onChange={(e) =>
+                      setForm({ ...form, image_url: e.target.value })
+                    }
+                  />
+                </div>
+
+                <div className="admin-field admin-field-full">
+                  <label>URL do vídeo</label>
+                  <input
+                    type="url"
+                    placeholder="https://..."
+                    value={form.video_url}
+                    onChange={(e) =>
+                      setForm({ ...form, video_url: e.target.value })
+                    }
+                  />
+                </div>
+
+                <div className="admin-field admin-field-full">
+                  <label>URL do checkout</label>
+                  <input
+                    type="url"
+                    placeholder="https://..."
+                    value={form.checkout_url}
+                    onChange={(e) =>
+                      setForm({ ...form, checkout_url: e.target.value })
+                    }
+                  />
+                </div>
+
+                <label className="admin-switch">
+                  <input
+                    type="checkbox"
+                    checked={form.active}
+                    onChange={(e) =>
+                      setForm({ ...form, active: e.target.checked })
+                    }
+                  />
+                  <span>Produto ativo e visível no HOTFLIX</span>
+                </label>
+              </div>
+
+              <div className="admin-form-actions">
+                <button
+                  type="button"
+                  className="admin-cancel-button"
+                  onClick={closeForm}
+                >
+                  Cancelar
+                </button>
+
+                <button
+                  type="submit"
+                  className="admin-save-button"
+                  disabled={saving}
+                >
+                  <Save size={18} />
+                  {saving
+                    ? 'Salvando...'
+                    : editingId
+                      ? 'Salvar alterações'
+                      : 'Cadastrar produto'}
+                </button>
+              </div>
+            </form>
+          </div>
+        )}
+
+        <div className="admin-products">
+          <div className="admin-products-header">
+            <div>
+              <h2>Produtos</h2>
+              <span>{products.length} cadastrados</span>
+            </div>
+          </div>
+
+          {loadingProducts ? (
+            <div className="admin-loading">
+              <RefreshCw size={30} className="spinner" />
+              <p>Carregando produtos...</p>
+            </div>
+          ) : products.length === 0 ? (
+            <div className="admin-empty">
+              <Plus size={40} />
+              <h3>Nenhum produto cadastrado</h3>
+              <p>Comece cadastrando o primeiro produto.</p>
+
+              <button onClick={openNewProduct}>
+                <Plus size={18} />
+                Cadastrar produto
+              </button>
+            </div>
+          ) : (
+            <div className="admin-product-list">
+              {products.map((product) => (
+                <div className="admin-product-row" key={product.id}>
+                  <div className="admin-product-thumb">
+                    {product.image_url ? (
+                      <img src={product.image_url} alt={product.title} />
+                    ) : (
+                      <span>▶</span>
+                    )}
+                  </div>
+
+                  <div className="admin-product-info">
+                    <h3>{product.title}</h3>
+
+                    <p>
+                      {product.description || 'Sem descrição'}
+                    </p>
+
+                    <div className="admin-product-meta">
+                      <strong>
+                        {Number(product.price).toLocaleString('pt-MZ')} MT
+                      </strong>
+
+                      <span>
+                        <Eye size={14} />
+                        {(product.views || 0).toLocaleString()}
+                      </span>
+
+                      <span>
+                        <MousePointerClick size={14} />
+                        {(product.clicks || 0).toLocaleString()}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="admin-product-status">
+                    <span
+                      className={
+                        product.active
+                          ? 'status-active'
+                          : 'status-inactive'
+                      }
+                    >
+                      {product.active ? 'Ativo' : 'Inativo'}
+                    </span>
+                  </div>
+
+                  <div className="admin-product-actions">
+                    <button
+                      title={product.active ? 'Desativar' : 'Ativar'}
+                      onClick={() => toggleProduct(product)}
+                    >
+                      <Power size={18} />
+                    </button>
+
+                    <button
+                      title="Editar"
+                      onClick={() => openEditProduct(product)}
+                    >
+                      <Pencil size={18} />
+                    </button>
+
+                    <button
+                      title="Excluir"
+                      className="delete"
+                      onClick={() => deleteProduct(product)}
+                    >
+                      <Trash2 size={18} />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </main>
+    </div>
+  )
+}
